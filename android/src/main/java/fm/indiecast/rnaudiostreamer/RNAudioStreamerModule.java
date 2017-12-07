@@ -11,15 +11,20 @@ import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.Callback;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 
+import com.google.android.exoplayer2.Player.TimelineChangeReason;
+import com.google.android.exoplayer2.PlaybackParameters;
+import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.DefaultLoadControl;
 import com.google.android.exoplayer2.ExoPlaybackException;
 import com.google.android.exoplayer2.ExoPlayer;
 import com.google.android.exoplayer2.ExoPlayerFactory;
 import com.google.android.exoplayer2.LoadControl;
+import com.google.android.exoplayer2.Player;
 import com.google.android.exoplayer2.SimpleExoPlayer;
 import com.google.android.exoplayer2.Timeline;
 import com.google.android.exoplayer2.extractor.DefaultExtractorsFactory;
 import com.google.android.exoplayer2.extractor.ExtractorsFactory;
+import com.google.android.exoplayer2.source.ClippingMediaSource;
 import com.google.android.exoplayer2.source.ExtractorMediaSource;
 import com.google.android.exoplayer2.source.MediaSource;
 import com.google.android.exoplayer2.source.TrackGroupArray;
@@ -34,7 +39,7 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.List;
 
-public class RNAudioStreamerModule extends ReactContextBaseJavaModule implements ExoPlayer.EventListener, ExtractorMediaSource.EventListener{
+public class RNAudioStreamerModule extends ReactContextBaseJavaModule implements Player.EventListener, ExtractorMediaSource.EventListener{
 
     // Player
     private SimpleExoPlayer player = null;
@@ -54,6 +59,18 @@ public class RNAudioStreamerModule extends ReactContextBaseJavaModule implements
     private static final String BUFFERING = "BUFFERING";
     private static final String ERROR = "ERROR";
 
+    @Override
+    public void onSeekProcessed() {}
+
+    @Override
+    public void onPlaybackParametersChanged(PlaybackParameters playbackParameters) {}
+
+    @Override
+    public void onShuffleModeEnabledChanged(boolean shuffleModeEnabled) {}
+
+    @Override
+    public void onRepeatModeChanged(int repeatMode) {}
+    
     @Override public String getName() {
         return "RNAudioStreamer";
     }
@@ -78,9 +95,10 @@ public class RNAudioStreamerModule extends ReactContextBaseJavaModule implements
         DataSource.Factory dataSourceFactory = new DefaultDataSourceFactory(reactContext, getDefaultUserAgent(), bandwidthMeter);
         Handler mainHandler = new Handler();
         MediaSource audioSource = new ExtractorMediaSource(Uri.parse(urlString), dataSourceFactory, extractorsFactory, mainHandler, this);
+        MediaSource clippedAudioSource = new ClippingMediaSource(audioSource, 15 * C.MICROS_PER_SECOND, 600000 * C.MICROS_PER_SECOND);
 
         // Start preparing audio
-        player.prepare(audioSource);
+        player.prepare(clippedAudioSource);
         player.addListener(this);
     }
 
@@ -152,9 +170,7 @@ public class RNAudioStreamerModule extends ReactContextBaseJavaModule implements
     }
 
     @Override
-    public void onPositionDiscontinuity() {
-
-    }
+    public void onPositionDiscontinuity(int reason) {}
 
     @Override
     public void onLoadingChanged(boolean isLoading) {
@@ -182,7 +198,7 @@ public class RNAudioStreamerModule extends ReactContextBaseJavaModule implements
     }
 
     @Override
-    public void onTimelineChanged(Timeline timeline, Object manifest) {}
+    public void onTimelineChanged(Timeline timeline, Object manifest, @TimelineChangeReason int reason) {}
 
     @Override
     public void onTracksChanged(TrackGroupArray trackGroups, TrackSelectionArray trackSelections) {}
