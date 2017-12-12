@@ -1,5 +1,7 @@
 package fm.indiecast.rnaudiostreamer;
 
+import android.content.Context;
+import android.media.AudioManager;
 import android.os.Handler;
 import android.util.Log;
 import android.os.Build;
@@ -36,19 +38,23 @@ import com.google.android.exoplayer2.upstream.DefaultBandwidthMeter;
 import com.google.android.exoplayer2.upstream.DefaultDataSourceFactory;
 
 import java.io.IOException;
-import java.util.Map;
-import java.util.List;
 
-public class RNAudioStreamerModule extends ReactContextBaseJavaModule implements Player.EventListener, ExtractorMediaSource.EventListener{
+public class RNAudioStreamerModule extends ReactContextBaseJavaModule implements
+        Player.EventListener,
+        ExtractorMediaSource.EventListener,
+        AudioManager.OnAudioFocusChangeListener {
 
     // Player
     private SimpleExoPlayer player = null;
     private String status = "STOPPED";
     private ReactApplicationContext reactContext = null;
+    private AudioManager audioManager;
 
     public RNAudioStreamerModule(ReactApplicationContext reactContext) {
         super(reactContext);
         this.reactContext = reactContext;
+
+        audioManager = (AudioManager) getReactApplicationContext().getSystemService(Context.AUDIO_SERVICE);
     }
 
     // Status
@@ -58,6 +64,36 @@ public class RNAudioStreamerModule extends ReactContextBaseJavaModule implements
     private static final String FINISHED = "FINISHED";
     private static final String BUFFERING = "BUFFERING";
     private static final String ERROR = "ERROR";
+    private static final String AUDIOFOCUS_LOST = "AUDIOFOCUS_LOST";
+
+    @Override
+    public void onAudioFocusChange(int focusChange) {
+        Log.d("RNAudioStreamerModule", "onAudioFocusChange: " + String.valueOf(focusChange));
+        switch (focusChange) {
+            case AudioManager.AUDIOFOCUS_LOSS:
+                this.stopWithState(AUDIOFOCUS_LOST);
+                break;
+            case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT:
+                // TODO: Lower volume
+                break;
+            case AudioManager.AUDIOFOCUS_GAIN:
+                // TODO: Normal volume
+                break;
+            default:
+                break;
+        }
+    }
+
+    Boolean requestAudioFocus() {
+        int result = audioManager.requestAudioFocus(this, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
+        Boolean success = result != AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
+        if (success) {
+            return true;
+        } else {
+            Log.d("RNAudioStreamerModule", "Error requesting audio focus: " + String.valueOf(result));
+            return false;
+        }
+    }
 
     @Override
     public void onSeekProcessed() {}
@@ -80,16 +116,20 @@ public class RNAudioStreamerModule extends ReactContextBaseJavaModule implements
     }
 
     @ReactMethod public void stop() {
+        stopWithState(STOPPED);
+    }
+
+    private void stopWithState(String newStatus) {
         if (player != null) {
             player.stop();
             player = null;
-            status = "STOPPED";
+            status = newStatus;
             this.sendStatusEvent();
         }
     }
 
     @ReactMethod public void setUrlWithOffset(String urlString, double offsetTime) {
-        this.stop();
+        this.stopWithState(STOPPED);
 
         // Create player
         TrackSelector trackSelector = new DefaultTrackSelector();
@@ -160,6 +200,7 @@ public class RNAudioStreamerModule extends ReactContextBaseJavaModule implements
             case ExoPlayer.STATE_READY:
                 if (this.player != null && this.player.getPlayWhenReady()) {
                     status = PLAYING;
+                    requestAudioFocus();
                     this.sendStatusEvent();
                 } else {
                     status = PAUSED;
