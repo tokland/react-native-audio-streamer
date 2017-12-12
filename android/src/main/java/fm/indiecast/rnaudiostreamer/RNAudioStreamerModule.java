@@ -76,13 +76,20 @@ public class RNAudioStreamerModule extends ReactContextBaseJavaModule implements
     }
 
     @ReactMethod public void setUrl(String urlString) {
+        setUrlWithOffset(urlString, 0.0);
+    }
 
-        if (player != null){
+    @ReactMethod public void stop() {
+        if (player != null) {
             player.stop();
             player = null;
             status = "STOPPED";
             this.sendStatusEvent();
         }
+    }
+
+    @ReactMethod public void setUrlWithOffset(String urlString, double offsetTime) {
+        this.stop();
 
         // Create player
         TrackSelector trackSelector = new DefaultTrackSelector();
@@ -95,7 +102,10 @@ public class RNAudioStreamerModule extends ReactContextBaseJavaModule implements
         DataSource.Factory dataSourceFactory = new DefaultDataSourceFactory(reactContext, getDefaultUserAgent(), bandwidthMeter);
         Handler mainHandler = new Handler();
         MediaSource audioSource = new ExtractorMediaSource(Uri.parse(urlString), dataSourceFactory, extractorsFactory, mainHandler, this);
-        MediaSource clippedAudioSource = new ClippingMediaSource(audioSource, 15 * C.MICROS_PER_SECOND, 600000 * C.MICROS_PER_SECOND);
+        long startPositionUs = (long) (offsetTime * (double) C.MICROS_PER_SECOND);
+        long endPositionUs = 1000000 * C.MICROS_PER_SECOND;
+        MediaSource clippedAudioSource = offsetTime <= 0.0 ? audioSource :
+            new ClippingMediaSource(audioSource, startPositionUs, endPositionUs);
 
         // Start preparing audio
         player.prepare(clippedAudioSource);
